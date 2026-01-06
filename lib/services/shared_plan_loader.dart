@@ -215,32 +215,61 @@ class SharedPlanLoader {
         return const SharedPlanSummary(exists: false, orderCount: 0);
       }
 
-      // Prefer newest account-scoped shared plan (matches IQ/HQ V3 behavior).
-      // Fallback to legacy filename for older builds.
+      // Prefer active-account pointer -> per-account plan file (HQ parity).
+      // If pointer missing/invalid, fall back to newest per-account plan file.
+      // Finally fall back to legacy shared_plan_v3.json.
       final legacy = File('$basePath/shared_plan_v3.json');
       File? file;
 
+      // 1) Pointer-first: shared_active_account_v1.json -> shared_plan_v3_<safeAccountId>.json
       try {
-        final dir = legacy.parent;
-        if (await dir.exists()) {
-          final candidates = dir
-              .listSync()
-              .whereType<File>()
-              .where((f) => f.path.contains('/shared_plan_v3_') && f.path.endsWith('.json'))
-              .toList();
-          candidates.sort((a, b) => b.lastModifiedSync().compareTo(a.lastModifiedSync()));
-          if (candidates.isNotEmpty) {
-            file = candidates.first;
-            debugPrint('SharedPlanLoader: using newest shared plan file: ${file.path}');
+        final pointer = File('$basePath/shared_active_account_v1.json');
+        if (await pointer.exists()) {
+          final decoded = json.decode(await pointer.readAsString());
+          if (decoded is Map) {
+            final m = Map<String, dynamic>.from(decoded);
+            final aid = m['accountId'];
+            if (aid is String && aid.trim().isNotEmpty) {
+              final safe = aid.trim().replaceAll(RegExp(r'[^a-zA-Z0-9_\-]'), '_');
+              final perAccount = File('$basePath/shared_plan_v3_$safe.json');
+              if (await perAccount.exists()) {
+                file = perAccount;
+                debugPrint('SharedPlanLoader: using active-account plan file: ${file.path}');
+              } else {
+                debugPrint('SharedPlanLoader: active pointer found but plan file missing: ${perAccount.path}');
+              }
+            }
           }
         }
       } catch (e) {
-        debugPrint('SharedPlanLoader: newest-file scan failed: $e');
+        debugPrint('SharedPlanLoader: active-account pointer read failed: $e');
       }
 
+      // 2) Newest-file scan: shared_plan_v3_*.json (per-account files)
+      if (file == null) {
+        try {
+          final dir = legacy.parent;
+          if (await dir.exists()) {
+            final candidates = dir
+                .listSync()
+                .whereType<File>()
+                .where((f) => f.path.contains('/shared_plan_v3_') && f.path.endsWith('.json'))
+                .toList();
+            candidates.sort((a, b) => b.lastModifiedSync().compareTo(a.lastModifiedSync()));
+            if (candidates.isNotEmpty) {
+              file = candidates.first;
+              debugPrint('SharedPlanLoader: using newest shared plan file: ${file.path}');
+            }
+          }
+        } catch (e) {
+          debugPrint('SharedPlanLoader: newest-file scan failed: $e');
+        }
+      }
+
+      // 3) Legacy fallback
       file ??= (await legacy.exists()) ? legacy : null;
       if (file == null || !await file.exists()) {
-        debugPrint('SharedPlanLoader: shared_plan_v3.json does not exist.');
+        debugPrint('SharedPlanLoader: no shared plan file found.');
         return const SharedPlanSummary(exists: false, orderCount: 0);
       }
 
