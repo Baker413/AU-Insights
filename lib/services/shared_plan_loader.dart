@@ -3,6 +3,8 @@ import 'dart:io';
 
 import 'package:flutter/foundation.dart';
 
+import 'package:au_core/au_core.dart';
+
 import '../shared/storage.dart';
 import '../models/shared_planned_order.dart';
 
@@ -213,17 +215,91 @@ class SharedPlanLoader {
         return const SharedPlanSummary(exists: false, orderCount: 0);
       }
 
-      // Prefer account-scoped shared plan (matches IQ/HQ V3 behavior).
+      // Prefer newest account-scoped shared plan (matches IQ/HQ V3 behavior).
       // Fallback to legacy filename for older builds.
-      final preferred = File('$basePath/shared_plan_v3_default.json');
       final legacy = File('$basePath/shared_plan_v3.json');
-      final file = await preferred.exists() ? preferred : legacy;
-      if (!await file.exists()) {
+      File? file;
+
+      try {
+        final dir = legacy.parent;
+        if (await dir.exists()) {
+          final candidates = dir
+              .listSync()
+              .whereType<File>()
+              .where((f) => f.path.contains('/shared_plan_v3_') && f.path.endsWith('.json'))
+              .toList();
+          candidates.sort((a, b) => b.lastModifiedSync().compareTo(a.lastModifiedSync()));
+          if (candidates.isNotEmpty) {
+            file = candidates.first;
+            debugPrint('SharedPlanLoader: using newest shared plan file: ${file.path}');
+          }
+        }
+      } catch (e) {
+        debugPrint('SharedPlanLoader: newest-file scan failed: $e');
+      }
+
+      file ??= (await legacy.exists()) ? legacy : null;
+      if (file == null || !await file.exists()) {
         debugPrint('SharedPlanLoader: shared_plan_v3.json does not exist.');
         return const SharedPlanSummary(exists: false, orderCount: 0);
       }
 
-      final text = await file.readAsString();
+      final File f = file;
+      final text = await f.readAsString();
+
+      // Contract-first parse (Shared Plan v3 wrapper) using au_core canonical model.
+      // If this succeeds, prefer it over ad-hoc field extraction to prevent schema drift.
+      final env = SharedPlanV3Envelope.tryParseJsonText(text);
+      if (env != null && env.version == 3) {
+        // Orders (v1) -> AU Insights view model.
+        final orders = <SharedPlannedOrder>[];
+        for (final o in env.ordersV1) {
+          orders.add(
+            SharedPlannedOrder(
+              symbol: o.symbol,
+              side: (o.side == SharedOrderSideV1.sell)
+                  ? SharedOrderSide.sell
+                  : SharedOrderSide.buy,
+              maxDollarExposure: o.maxDollarExposure,
+              stopLossPrice: o.stopLossPrice,
+              targetPrice: o.targetPrice,
+              rationale: o.rationale,
+            ),
+          );
+        }
+
+        // Blocks v1: au_core provides these as raw maps; reuse AU Insights model.
+        final blocks = <SharedBlock>[];
+        final rawBlocks = env.blocksV1;
+        if (rawBlocks != null) {
+          for (final b in rawBlocks) {
+            try {
+              blocks.add(SharedBlock.fromJson(b));
+            } catch (e, st) {
+              debugPrint('SharedPlanLoader: skipping bad block entry (contract): $e\n$st');
+            }
+          }
+        }
+
+        return SharedPlanSummary(
+          exists: true,
+          orderCount: orders.length,
+          symbolCount: orders.map((o) => o.symbol).toSet().length,
+          buyCount: orders.where((o) => o.side == SharedOrderSide.buy).length,
+          sellCount: orders.where((o) => o.side == SharedOrderSide.sell).length,
+          totalMaxExposure: orders.fold(0.0, (sum, o) => sum + o.maxDollarExposure),
+          riskModeLabel: env.riskModeLabel,
+          assumedEquityDollars: env.assumedEquityDollars,
+          version: env.version,
+          timestamp: (env.timestamp != null) ? DateTime.tryParse(env.timestamp!) : null,
+          orders: orders,
+          riskSummary: null,
+          blocks: blocks,
+          snapshotMeta: null,
+          positions: const [],
+        );
+      }
+
       final decoded = json.decode(text);
 
       List<SharedPlannedOrder> orders = <SharedPlannedOrder>[];
