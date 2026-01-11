@@ -55,7 +55,17 @@ class SharedSnapshotMeta {
   final DateTime? asOf;
   final int? totalTrades;
 
-  const SharedSnapshotMeta({this.accountLabel, this.asOf, this.totalTrades});
+  /// Canonical (preferred) long exposure dollars, producer-supplied.
+  ///
+  /// Backwards-compatible: if absent, we fall back to legacy `exposureDollars`.
+  final double? currentExposureDollars;
+
+  const SharedSnapshotMeta({
+    this.accountLabel,
+    this.asOf,
+    this.totalTrades,
+    this.currentExposureDollars,
+  });
 
   factory SharedSnapshotMeta.fromJson(Map<String, dynamic> json) {
     DateTime? asOf;
@@ -72,10 +82,14 @@ class SharedSnapshotMeta {
       totalTrades = tt.toInt();
     }
 
+    final double? currentExposure =
+        _toDouble(json['currentExposureDollars']) ?? _toDouble(json['exposureDollars']);
+
     return SharedSnapshotMeta(
       accountLabel: json['accountLabel'] as String?,
       asOf: asOf,
       totalTrades: totalTrades,
+      currentExposureDollars: currentExposure,
     );
   }
 }
