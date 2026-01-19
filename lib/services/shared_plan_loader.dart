@@ -15,6 +15,17 @@ double? _toDouble(dynamic v) {
   return null;
 }
 
+List<String>? _normalizeAllowedSymbols(dynamic v) {
+  if (v is! List) return null;
+  final out = <String>[];
+  for (final e in v) {
+    final t = (e ?? '').toString().trim().toUpperCase();
+    if (t.isNotEmpty) out.add(t);
+  }
+  final dedup = out.toSet().toList()..sort();
+  return dedup.isNotEmpty ? dedup : null;
+}
+
 String _toString(dynamic v) {
   if (v == null) return '';
   if (v is String) return v;
@@ -200,6 +211,7 @@ class SharedPlanSummary {
   final List<SharedBlock> blocks;
   final SharedSnapshotMeta? snapshotMeta;
   final List<SharedPosition> positions;
+  final List<String>? allowedSymbols;
 
   const SharedPlanSummary({
     required this.exists,
@@ -217,6 +229,7 @@ class SharedPlanSummary {
     this.blocks = const [],
     this.snapshotMeta,
     this.positions = const [],
+    this.allowedSymbols,
   });
 }
 
@@ -324,6 +337,10 @@ class SharedPlanLoader {
           }
         }
 
+        // Producer-owned governance: allowed symbol universe (optional).
+        // Null/empty means "not enforced".
+        final List<String>? allowedSymbolsOrNull = _normalizeAllowedSymbols(env.allowedSymbols);
+
         return SharedPlanSummary(
           exists: true,
           orderCount: orders.length,
@@ -338,12 +355,20 @@ class SharedPlanLoader {
           orders: orders,
           riskSummary: null,
           blocks: blocks,
+          allowedSymbols: allowedSymbolsOrNull,
           snapshotMeta: null,
           positions: const [],
         );
       }
 
       final decoded = json.decode(text);
+
+      // Producer-owned governance: allowed symbol universe (optional).
+      // Prefer the envelope field (contract-first). For legacy JSON, read root key if present.
+      List<String>? allowedSymbols;
+      if (decoded is Map) {
+        allowedSymbols = _normalizeAllowedSymbols(decoded['allowedSymbols']);
+      }
 
       List<SharedPlannedOrder> orders = <SharedPlannedOrder>[];
       SharedRiskSnapshot? riskSummary;
@@ -500,6 +525,7 @@ class SharedPlanLoader {
           riskSummary: riskSummary,
           blocks: blocks,
           snapshotMeta: snapshotMeta,
+          allowedSymbols: allowedSymbols,
           positions: positions,
         );
       }
