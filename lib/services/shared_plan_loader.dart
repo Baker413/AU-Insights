@@ -341,6 +341,50 @@ class SharedPlanLoader {
         // Null/empty means "not enforced".
         final List<String>? allowedSymbolsOrNull = _normalizeAllowedSymbols(env.allowedSymbols);
 
+        // --- AU Audit (read-only consumer) ---
+        // Run the au_core Audit Wall on the *plan we are about to display*.
+        // This is non-gating: we log summary + WARN/FAIL lines for visibility.
+        try {
+          final ordersV1 = env.ordersV1
+              .map((o) => Map<String, Object?>.from(o.toJson()))
+              .toList(growable: false);
+
+          final blocksV1 = (env.blocksV1 ?? const <Map<String, dynamic>>[])
+              .map((b) => Map<String, Object?>.from(b))
+              .toList(growable: false);
+
+          final ctx = AuditContext(
+            now: DateTime.now(),
+            snapshotMeta: const <String, Object?>{},
+            ordersV1: ordersV1,
+            blocksV1: blocksV1,
+            executionsV1: const <Map<String, Object?>>[],
+            priorBlocksV1: const <Map<String, Object?>>[],
+            strictMode: false,
+            riskModeLabel: env.riskModeLabel,
+            assumedEquityDollars: env.assumedEquityDollars,
+            accountId: env.accountId,
+            accountLabel: env.accountLabel,
+            planId: env.planId,
+            planSource: env.source,
+            planTimestampIso: env.timestamp,
+            identityVersion: env.identityVersion,
+            allowedSymbols: allowedSymbolsOrNull,
+          );
+
+          final report = const AuditRunner().run(ctx);
+          debugPrint('=== AU INSIGHTS AUDIT REPORT ===');
+          debugPrint(report.summaryLine());
+          for (final r in report.results) {
+            if (r.status.label == 'FAIL' || r.status.label == 'WARN') {
+              debugPrint('[${r.id}] ${r.status.label}: ${r.title} — ${r.message}');
+            }
+          }
+          debugPrint('=== END AU INSIGHTS AUDIT REPORT ===');
+        } catch (e, st) {
+          debugPrint('AU Insights: audit run failed (non-gating): $e\n$st');
+        }
+
         return SharedPlanSummary(
           exists: true,
           orderCount: orders.length,
