@@ -147,7 +147,7 @@ class _InsightsHomeScreenState extends State<InsightsHomeScreen> {
                           )
                         : !hasPlan
                             ? Text(
-                                'No shared_plan_v3.json with orders found yet.\n\n'
+                                'No shared plan found yet.\n\n'
                                 'Once IQ Pro saves a shared plan on this device, '
                                 'AU Insights will display full details here.',
                                 style: theme.textTheme.bodyMedium,
