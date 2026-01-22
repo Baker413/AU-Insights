@@ -213,6 +213,13 @@ class SharedPlanSummary {
   final List<SharedPosition> positions;
   final List<String>? allowedSymbols;
 
+  /// Non-fatal App Group inventory warnings (normalized by au_core).
+  /// Includes governance signals like INV-154 ungovernedArtifact.
+  final List<String> inventoryWarnings;
+
+  /// Non-fatal selector warnings from au_core SharedPlanLocatorV1.
+  final List<String> locatorWarnings;
+
   const SharedPlanSummary({
     required this.exists,
     required this.orderCount,
@@ -230,6 +237,8 @@ class SharedPlanSummary {
     this.snapshotMeta,
     this.positions = const [],
     this.allowedSymbols,
+    this.inventoryWarnings = const [],
+    this.locatorWarnings = const [],
   });
 }
 
@@ -240,7 +249,7 @@ class SharedPlanLoader {
       if (basePath == null || basePath.isEmpty) {
         debugPrint('SharedPlanLoader: no AppGroup path available.');
         return const SharedPlanSummary(exists: false, orderCount: 0);
-      }
+}
       // Prefer active-account pointer -> per-account plan file (INV-144 parity).
       // Selection is governed by au_core SharedPlanLocatorV1 over a normalized StorageInventoryV1.
       final dir = Directory(basePath);
@@ -274,8 +283,11 @@ class SharedPlanLoader {
       }
 
       final inventory = StorageInventoryNormalizer.normalize(raw);
+      final invWarnings = <String>[];
       for (final w in inventory.warnings) {
-        debugPrint('SharedPlanLoader: inventory warning: $w');
+        final msg = w.toString();
+        invWarnings.add(msg);
+        debugPrint('SharedPlanLoader: inventory warning: $msg');
       }
 
       String? activeAccountId;
@@ -301,14 +313,22 @@ class SharedPlanLoader {
         activeAccountId: activeAccountId,
         allowLegacyFallback: true,
       );
+      final locWarnings = <String>[];
       for (final w in sel.warnings) {
-        debugPrint('SharedPlanLoader: locator warning: $w');
+        final msg = w.toString();
+        locWarnings.add(msg);
+        debugPrint('SharedPlanLoader: locator warning: $msg');
       }
 
       final selectedPath = sel.selected?.path;
       if (selectedPath == null || selectedPath.trim().isEmpty) {
         debugPrint('SharedPlanLoader: no shared plan file selected (reason=${sel.reason}).');
-        return const SharedPlanSummary(exists: false, orderCount: 0);
+        return SharedPlanSummary(
+          exists: false,
+          orderCount: 0,
+          inventoryWarnings: invWarnings,
+          locatorWarnings: locWarnings,
+        );
       }
 
       final File f = File(selectedPath);
@@ -413,7 +433,9 @@ class SharedPlanLoader {
           allowedSymbols: allowedSymbolsOrNull,
           snapshotMeta: null,
           positions: const [],
-        );
+          inventoryWarnings: invWarnings,
+          locatorWarnings: locWarnings,
+      );
       }
 
       final decoded = json.decode(text);
@@ -582,7 +604,9 @@ class SharedPlanLoader {
           snapshotMeta: snapshotMeta,
           allowedSymbols: allowedSymbols,
           positions: positions,
-        );
+          inventoryWarnings: invWarnings,
+          locatorWarnings: locWarnings,
+      );
       }
 
       final symbols = <String>{};
@@ -616,10 +640,12 @@ class SharedPlanLoader {
         blocks: blocks,
         snapshotMeta: snapshotMeta,
         positions: positions,
+          inventoryWarnings: invWarnings,
+          locatorWarnings: locWarnings,
       );
     } catch (e, st) {
       debugPrint('SharedPlanLoader: error reading shared plan: $e\n$st');
       return const SharedPlanSummary(exists: false, orderCount: 0);
-    }
+}
   }
 }
