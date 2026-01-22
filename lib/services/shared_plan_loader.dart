@@ -241,14 +241,44 @@ class SharedPlanLoader {
         debugPrint('SharedPlanLoader: no AppGroup path available.');
         return const SharedPlanSummary(exists: false, orderCount: 0);
       }
+      // Prefer active-account pointer -> per-account plan file (INV-144 parity).
+      // Selection is governed by au_core SharedPlanLocatorV1 over a normalized StorageInventoryV1.
+      final dir = Directory(basePath);
+      final raw = <StorageArtifact>[];
 
-      // Prefer active-account pointer -> per-account plan file (HQ parity).
-      // If pointer missing/invalid, fall back to newest per-account plan file.
-      // Finally fall back to legacy shared_plan_v3.json.
-      final legacy = File('$basePath/shared_plan_v3.json');
-      File? file;
+      // Build raw inventory from the App Group directory (no deletion, read-only).
+      try {
+        if (await dir.exists()) {
+          for (final ent in dir.listSync()) {
+            if (ent is! File) continue;
+            try {
+              final p = ent.path;
+              final fn = p.split(Platform.pathSeparator).last;
+              final bytes = ent.lengthSync();
+              final mod = ent.lastModifiedSync().toUtc().millisecondsSinceEpoch;
+              raw.add(
+                StorageArtifact(
+                  path: p,
+                  fileName: fn,
+                  bytes: bytes,
+                  modifiedAtEpochMsUtc: mod,
+                ),
+              );
+            } catch (e) {
+              debugPrint('SharedPlanLoader: skipping inventory entry due to error: $e');
+            }
+          }
+        }
+      } catch (e) {
+        debugPrint('SharedPlanLoader: inventory scan failed: $e');
+      }
 
-      // 1) Pointer-first: shared_active_account_v1.json -> shared_plan_v3_<safeAccountId>.json
+      final inventory = StorageInventoryNormalizer.normalize(raw);
+      for (final w in inventory.warnings) {
+        debugPrint('SharedPlanLoader: inventory warning: $w');
+      }
+
+      String? activeAccountId;
       try {
         final pointer = File('$basePath/shared_active_account_v1.json');
         if (await pointer.exists()) {
@@ -257,14 +287,7 @@ class SharedPlanLoader {
             final m = Map<String, dynamic>.from(decoded);
             final aid = m['accountId'];
             if (aid is String && aid.trim().isNotEmpty) {
-              final safe = aid.trim().replaceAll(RegExp(r'[^a-zA-Z0-9_\-]'), '_');
-              final perAccount = File('$basePath/shared_plan_v3_$safe.json');
-              if (await perAccount.exists()) {
-                file = perAccount;
-                debugPrint('SharedPlanLoader: using active-account plan file: ${file.path}');
-              } else {
-                debugPrint('SharedPlanLoader: active pointer found but plan file missing: ${perAccount.path}');
-              }
+              activeAccountId = aid.trim();
             }
           }
         }
@@ -272,35 +295,23 @@ class SharedPlanLoader {
         debugPrint('SharedPlanLoader: active-account pointer read failed: $e');
       }
 
-      // 2) Newest-file scan: shared_plan_v3_*.json (per-account files)
-      if (file == null) {
-        try {
-          final dir = legacy.parent;
-          if (await dir.exists()) {
-            final candidates = dir
-                .listSync()
-                .whereType<File>()
-                .where((f) => f.path.contains('/shared_plan_v3_') && f.path.endsWith('.json'))
-                .toList();
-            candidates.sort((a, b) => b.lastModifiedSync().compareTo(a.lastModifiedSync()));
-            if (candidates.isNotEmpty) {
-              file = candidates.first;
-              debugPrint('SharedPlanLoader: using newest shared plan file: ${file.path}');
-            }
-          }
-        } catch (e) {
-          debugPrint('SharedPlanLoader: newest-file scan failed: $e');
-        }
+      const locator = SharedPlanLocatorV1();
+      final sel = locator.locate(
+        inventory: inventory,
+        activeAccountId: activeAccountId,
+        allowLegacyFallback: true,
+      );
+      for (final w in sel.warnings) {
+        debugPrint('SharedPlanLoader: locator warning: $w');
       }
 
-      // 3) Legacy fallback
-      file ??= (await legacy.exists()) ? legacy : null;
-      if (file == null || !await file.exists()) {
-        debugPrint('SharedPlanLoader: no shared plan file found.');
+      final selectedPath = sel.selected?.path;
+      if (selectedPath == null || selectedPath.trim().isEmpty) {
+        debugPrint('SharedPlanLoader: no shared plan file selected (reason=${sel.reason}).');
         return const SharedPlanSummary(exists: false, orderCount: 0);
       }
 
-      final File f = file;
+      final File f = File(selectedPath);
       final text = await f.readAsString();
 
       // Contract-first parse (Shared Plan v3 wrapper) using au_core canonical model.
