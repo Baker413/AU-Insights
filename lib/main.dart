@@ -598,6 +598,24 @@ class _InsightsHomeScreenState extends State<InsightsHomeScreen> {
             style: theme.textTheme.bodyMedium,
           ),
         ],
+        if (plan.inventoryWarnings.isNotEmpty || plan.locatorWarnings.isNotEmpty) ...[
+          const SizedBox(height: 12),
+          Text('Warnings (read-only):', style: theme.textTheme.titleSmall),
+          const SizedBox(height: 4),
+          if (plan.inventoryWarnings.isNotEmpty) ...[
+            Text('Inventory warnings: ${plan.inventoryWarnings.length}', style: theme.textTheme.bodySmall),
+            ...plan.inventoryWarnings.take(3).map((w) => Text('• $w', style: theme.textTheme.bodySmall)),
+            if (plan.inventoryWarnings.length > 3)
+              Text('• (+${plan.inventoryWarnings.length - 3} more)', style: theme.textTheme.bodySmall),
+            const SizedBox(height: 6),
+          ],
+          if (plan.locatorWarnings.isNotEmpty) ...[
+            Text('Selector warnings: ${plan.locatorWarnings.length}', style: theme.textTheme.bodySmall),
+            ...plan.locatorWarnings.take(3).map((w) => Text('• $w', style: theme.textTheme.bodySmall)),
+            if (plan.locatorWarnings.length > 3)
+              Text('• (+${plan.locatorWarnings.length - 3} more)', style: theme.textTheme.bodySmall),
+          ],
+        ],
         const SizedBox(height: 12),
         if (snapshot != null || topPositions.isNotEmpty) ...[
           Text(
