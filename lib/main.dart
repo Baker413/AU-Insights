@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import 'package:flutter/services.dart';
 import 'services/shared_plan_loader.dart';
 import 'screens/plan_details_screen.dart';
 import 'screens/blocks_screen.dart';
@@ -515,6 +516,97 @@ class _InsightsHomeScreenState extends State<InsightsHomeScreen> {
   }
 
 
+
+  void _showWarningsSheet(BuildContext context, SharedPlanSummary plan) {
+    final inv = plan.inventoryWarnings;
+    final loc = plan.locatorWarnings;
+
+    final lines = <String>[];
+    if (inv.isNotEmpty) {
+      lines.add('Inventory warnings (${inv.length})');
+      for (final w in inv) {
+        lines.add('• $w');
+      }
+      lines.add('');
+    }
+    if (loc.isNotEmpty) {
+      lines.add('Selector warnings (${loc.length})');
+      for (final w in loc) {
+        lines.add('• $w');
+      }
+    }
+
+    final text = lines.join('\n').trim();
+    if (text.isEmpty) return;
+
+    showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      showDragHandle: true,
+      builder: (sheetContext) {
+        return SafeArea(
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Row(
+                  children: [
+                    const Expanded(
+                      child: Text(
+                        'Warnings',
+                        style: TextStyle(fontWeight: FontWeight.w600),
+                      ),
+                    ),
+                    TextButton(
+                      onPressed: () async {
+                        await Clipboard.setData(ClipboardData(text: text));
+                        if (!sheetContext.mounted) return;
+                        ScaffoldMessenger.of(sheetContext).showSnackBar(
+                          const SnackBar(content: Text('Warnings copied to clipboard.')),
+                        );
+                      },
+                      child: const Text('Copy'),
+                    ),
+                    const SizedBox(width: 8),
+                    TextButton(
+                      onPressed: () {
+                        // Main screen only: allow quick rescan.
+                        setState(() {
+                          _future = _loader.load();
+                        });
+                        Navigator.of(sheetContext).pop();
+                      },
+                      child: const Text('Rescan'),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 8),
+                ConstrainedBox(
+                  constraints: BoxConstraints(
+                    maxHeight: MediaQuery.of(sheetContext).size.height * 0.6,
+                  ),
+                  child: SingleChildScrollView(
+                    child: SelectableText(text),
+                  ),
+                ),
+                const SizedBox(height: 12),
+                Align(
+                  alignment: Alignment.centerRight,
+                  child: TextButton(
+                    onPressed: () => Navigator.of(sheetContext).pop(),
+                    child: const Text('Close'),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+
   Widget _buildPlanSummary(BuildContext context, SharedPlanSummary plan) {
     final theme = Theme.of(context);
     final equity = plan.assumedEquityDollars;
@@ -603,7 +695,22 @@ class _InsightsHomeScreenState extends State<InsightsHomeScreen> {
           Text('Warnings (read-only):', style: theme.textTheme.titleSmall),
           const SizedBox(height: 4),
           if (plan.inventoryWarnings.isNotEmpty) ...[
-            Text('Inventory warnings: ${plan.inventoryWarnings.length}', style: theme.textTheme.bodySmall),
+            
+                    Row(
+                      children: [
+                        Expanded(
+                          child: Text(
+                            'Warnings',
+                            style: theme.textTheme.titleSmall,
+                          ),
+                        ),
+                        TextButton(
+                          onPressed: () => _showWarningsSheet(context, plan),
+                          child: const Text('View all'),
+                        ),
+                      ],
+                    ),
+                        Text('Inventory warnings: ${plan.inventoryWarnings.length}', style: theme.textTheme.bodySmall),
             ...plan.inventoryWarnings.take(3).map((w) => Text('• $w', style: theme.textTheme.bodySmall)),
             if (plan.inventoryWarnings.length > 3)
               Text('• (+${plan.inventoryWarnings.length - 3} more)', style: theme.textTheme.bodySmall),

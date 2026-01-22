@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 import '../services/shared_plan_loader.dart';
 import '../models/shared_planned_order.dart';
@@ -14,6 +15,61 @@ class PlanDetailsScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    void showWarningsDialog() {
+      final inv = plan.inventoryWarnings;
+      final loc = plan.locatorWarnings;
+
+      final lines = <String>[];
+      if (inv.isNotEmpty) {
+        lines.add('Inventory warnings (${inv.length})');
+        for (final w in inv) {
+          lines.add('• $w');
+        }
+        lines.add('');
+      }
+      if (loc.isNotEmpty) {
+        lines.add('Selector warnings (${loc.length})');
+        for (final w in loc) {
+          lines.add('• $w');
+        }
+      }
+
+      final text = lines.join('\n').trim();
+      if (text.isEmpty) return;
+
+      showDialog<void>(
+        context: context,
+        builder: (dialogContext) {
+          return AlertDialog(
+            title: const Text('Warnings'),
+            content: SizedBox(
+              width: double.maxFinite,
+              child: SingleChildScrollView(
+                child: SelectableText(text),
+              ),
+            ),
+            actions: [
+              TextButton(
+                onPressed: () async {
+                  await Clipboard.setData(ClipboardData(text: text));
+                  if (!dialogContext.mounted) return;
+                  ScaffoldMessenger.of(dialogContext).showSnackBar(
+                    const SnackBar(content: Text('Warnings copied to clipboard.')),
+                  );
+                },
+                child: const Text('Copy'),
+              ),
+              TextButton(
+                onPressed: () => Navigator.of(dialogContext).pop(),
+                child: const Text('Close'),
+              ),
+            ],
+          );
+        },
+      );
+    }
+
+
     final equity = plan.assumedEquityDollars;
     final exposure = plan.totalMaxExposure;
     final timestamp = plan.timestamp;
@@ -144,7 +200,22 @@ class PlanDetailsScreen extends StatelessWidget {
                       Text('Warnings (read-only):', style: theme.textTheme.titleSmall),
                       const SizedBox(height: 4),
                       if (plan.inventoryWarnings.isNotEmpty) ...[
-                        Text('Inventory warnings: ${plan.inventoryWarnings.length}', style: theme.textTheme.bodySmall),
+                        
+                    Row(
+                      children: [
+                        Expanded(
+                          child: Text(
+                            'Warnings',
+                            style: theme.textTheme.titleSmall,
+                          ),
+                        ),
+                        TextButton(
+                          onPressed: showWarningsDialog,
+                          child: const Text('View all'),
+                        ),
+                      ],
+                    ),
+                    Text('Inventory warnings: ${plan.inventoryWarnings.length}', style: theme.textTheme.bodySmall),
                         ...plan.inventoryWarnings.take(3).map((w) => Text('• $w', style: theme.textTheme.bodySmall)),
                         if (plan.inventoryWarnings.length > 3)
                           Text('• (+${plan.inventoryWarnings.length - 3} more)', style: theme.textTheme.bodySmall),
