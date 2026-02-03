@@ -440,7 +440,7 @@ class _InsightsHomeScreenState extends State<InsightsHomeScreen> {
       showTrimHelperAction = true;
     } else if (netPct > 0.0) {
       postureLine =
-          'Risk posture: mildly long – net exposure is positive but still within a moderate band.';
+          'Risk posture: mildly long – net exposure is positive but still within a balanced band.';
       showTrimHelperAction = true;
     } else if (netPct < -25.0) {
       postureLine =
