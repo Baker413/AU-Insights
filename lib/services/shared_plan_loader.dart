@@ -292,14 +292,14 @@ class SharedPlanLoader {
 
       String? activeAccountId;
       try {
-        final pointer = File('$basePath/shared_active_account_v1.json');
+        final pointer = File('$basePath/${SharedActiveAccountV1.kFileName}');
         if (await pointer.exists()) {
-          final decoded = json.decode(await pointer.readAsString());
-          if (decoded is Map) {
-            final m = Map<String, dynamic>.from(decoded);
-            final aid = m['accountId'];
-            if (aid is String && aid.trim().isNotEmpty) {
-              activeAccountId = aid.trim();
+          final text = await pointer.readAsString();
+          final parsed = SharedActiveAccountV1.tryParseJsonText(text);
+          if (parsed != null) {
+            final aid = parsed.activeAccountId.trim();
+            if (aid.isNotEmpty) {
+              activeAccountId = aid;
             }
           }
         }
