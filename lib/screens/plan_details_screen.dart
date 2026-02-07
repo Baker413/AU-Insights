@@ -284,7 +284,7 @@ class PlanDetailsScreen extends StatelessWidget {
                       .toList(growable: false);
 
                   final provider =
-                      RiskRecommendationProviderV1.snapshotComposedFromSnapshotV1(
+                      RiskRecommendationProviderV1.snapshotPreferEmbeddedFromSnapshotMetaV1(
                         snapshotMeta: snapshotMeta,
                         positions: positionsV1,
                         assumedEquityDollars: plan.assumedEquityDollars,
