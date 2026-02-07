@@ -56,7 +56,15 @@ class SharedRiskSnapshot {
       currentHedgeDollars: _toDouble(json['currentHedgeDollars']),
       maxPerSymbolDollars: _toDouble(json['maxPerSymbolDollars']),
       maxPerBlockRiskDollars: _toDouble(json['maxPerBlockRiskDollars']),
-      drawdownPercent: _toDouble(json['drawdownPercent']),
+      // Back-compat:
+      // - legacy: drawdownPercent (percent units, e.g. 12.0)
+      // - contract: drawdownPct (fraction units, e.g. 0.12) => convert to percent
+      drawdownPercent: (() {
+        final legacy = _toDouble(json['drawdownPercent']);
+        if (legacy != null) return legacy;
+        final pct = _toDouble(json['drawdownPct']);
+        return pct != null ? (pct * 100.0) : null;
+      })(),
     );
   }
 }
