@@ -387,6 +387,57 @@ class SharedPlanLoader {
         final List<String>? allowedSymbolsOrNull = _normalizeAllowedSymbols(
           env.allowedSymbols,
         );
+        // Preserve v3 envelope snapshotMeta + positions for provider wiring and diagnostics.
+        // Use contract-first extraction via env.toJson() to avoid schema drift.
+        Map<String, Object?>? snapshotMetaRaw;
+        SharedSnapshotMeta? snapshotMeta;
+        final positions = <SharedPosition>[];
+        try {
+          final envJson = Map<String, dynamic>.from(env.toJson());
+
+          final sm = envJson['snapshotMeta'];
+          if (sm is Map) {
+            snapshotMetaRaw = Map<String, Object?>.from(sm);
+            try {
+              snapshotMeta = SharedSnapshotMeta.fromJson(
+                Map<String, dynamic>.from(sm),
+              );
+            } catch (e, st) {
+              debugPrint(
+                'SharedPlanLoader: skipping bad v3 snapshotMeta entry: $e\n$st',
+              );
+            }
+          }
+
+          final pos = envJson['positionsV1'];
+          if (pos is List) {
+            for (final item in pos) {
+              if (item is Map<String, dynamic>) {
+                try {
+                  positions.add(SharedPosition.fromJson(item));
+                } catch (e, st) {
+                  debugPrint(
+                    'SharedPlanLoader: skipping bad v3 position entry (Map<String,dynamic>): $e\n$st',
+                  );
+                }
+              } else if (item is Map) {
+                try {
+                  positions.add(
+                    SharedPosition.fromJson(Map<String, dynamic>.from(item)),
+                  );
+                } catch (e, st) {
+                  debugPrint(
+                    'SharedPlanLoader: skipping bad v3 position entry (Map): $e\n$st',
+                  );
+                }
+              }
+            }
+          }
+        } catch (e, st) {
+          debugPrint(
+            'SharedPlanLoader: v3 snapshotMeta/positions extraction failed: $e\n$st',
+          );
+        }
 
         // --- AU Audit (read-only consumer) ---
         // Run the au_core Audit Wall on the *plan we are about to display*.
@@ -402,7 +453,7 @@ class SharedPlanLoader {
 
           final ctx = AuditContext(
             now: DateTime.now(),
-            snapshotMeta: const <String, Object?>{},
+            snapshotMeta: snapshotMetaRaw ?? const <String, Object?>{},
             ordersV1: ordersV1,
             blocksV1: blocksV1,
             executionsV1: const <Map<String, Object?>>[],
@@ -454,9 +505,9 @@ class SharedPlanLoader {
           riskSummary: null,
           blocks: blocks,
           allowedSymbols: allowedSymbolsOrNull,
-          snapshotMeta: null,
-          snapshotMetaRaw: null,
-          positions: const [],
+          snapshotMeta: snapshotMeta,
+          snapshotMetaRaw: snapshotMetaRaw,
+          positions: positions,
           inventoryWarnings: invWarnings,
           locatorWarnings: locWarnings,
         );
