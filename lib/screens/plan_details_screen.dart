@@ -1,8 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:au_core/au_core.dart';
 import 'package:au_core/risk/risk_recommendation_provider_v1.dart';
-import 'package:au_core/risk/risk_recommendation_v1.dart';
-import 'package:au_core/risk_thresholds.dart';
 import 'package:au_core/trigger_engine/profiles.dart' as te;
 
 import '../services/shared_plan_loader.dart';
@@ -12,6 +11,33 @@ class PlanDetailsScreen extends StatelessWidget {
   final SharedPlanSummary plan;
 
   const PlanDetailsScreen({super.key, required this.plan});
+
+  /// Canonical, deterministic mapping from a risk mode label/token to AUProfile.
+  ///
+  /// Governance:
+  /// - Canonical ladder profiles: conservative, balanced, cautiouslyAggressive, aggressive
+  /// - Back-compat: legacy token LegacyRiskModeTokensV1.moderate is treated as Balanced (MIG-001).
+  te.AUProfile _profileFromRiskModeLabel(String? raw) {
+    final t0 = (raw ?? '').trim();
+    if (t0.isEmpty) return te.AUProfile.balanced;
+
+    // Canonicalize: lower + remove separators/spaces for tolerant reads (UI labels vs tokens).
+    final t = t0.toLowerCase().replaceAll(RegExp(r'[\s\-_]'), '');
+
+    if (t == 'conservative') return te.AUProfile.conservative;
+
+    // Canonical: balanced
+    if (t == 'balanced') return te.AUProfile.balanced;
+
+    // MIG-001 back-compat: legacy LegacyRiskModeTokensV1.moderate token may exist on older devices.
+    if (t == LegacyRiskModeTokensV1.moderate) return te.AUProfile.balanced;
+
+    if (t == 'cautiouslyaggressive') return te.AUProfile.cautiouslyAggressive;
+    if (t == 'aggressive') return te.AUProfile.aggressive;
+
+    // Safe fallback (explicitly conservative in behavior would be a governance change; we keep historical default).
+    return te.AUProfile.balanced;
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -290,14 +316,6 @@ class PlanDetailsScreen extends StatelessWidget {
                         assumedEquityDollars: plan.assumedEquityDollars,
                       );
 
-                  final RiskRecommendationV1 reco = provider
-                      .buildRiskRecommendationV1(
-                        thresholds: RiskThresholdsV1.defaults,
-                        emergencyMode: false,
-                        maxAllowed: null,
-                        nowUtc: DateTime.now().toUtc(),
-                      );
-
                   String profileLabel(te.AUProfile p) {
                     switch (p) {
                       case te.AUProfile.conservative:
@@ -311,7 +329,20 @@ class PlanDetailsScreen extends StatelessWidget {
                     }
                   }
 
-                  final reasons = reco.reasons;
+                  // Diamond: thresholds derived deterministically from IQ riskModeLabel (MIG-001 back-compat).
+                  final te.AUProfile thProfile = _profileFromRiskModeLabel(
+                    plan.riskModeLabel ?? snapshotMeta['riskModeLabel']?.toString(),
+                  );
+                  final thresholds = RiskThresholdsV1.defaultsForProfile(thProfile);
+
+                  final RiskRecommendationV1 reco = provider.buildRiskRecommendationV1(
+                    thresholds: thresholds,
+                    emergencyMode: false,
+                    maxAllowed: null,
+                    nowUtc: DateTime.now().toUtc(),
+                  );
+
+final reasons = reco.reasons;
 
                   return Card(
                     child: Padding(
@@ -325,7 +356,7 @@ class PlanDetailsScreen extends StatelessWidget {
                           ),
                           const SizedBox(height: 8),
                           Text(
-                            'Threshold policy: RiskThresholdsV1.defaults (governed)',
+                            'Threshold policy: defaultsForProfile(${profileLabel(thProfile)}) (governed)',
                             style: theme.textTheme.bodySmall,
                           ),
                           const SizedBox(height: 8),
