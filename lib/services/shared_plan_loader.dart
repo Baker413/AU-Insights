@@ -68,7 +68,7 @@ class SharedSnapshotMeta {
 
   /// Canonical (preferred) long exposure dollars, producer-supplied.
   ///
-  /// Backwards-compatible: if absent, we fall back to legacy `exposureDollars`.
+  /// Preference order: `exposureDollars` (canonical) → `currentExposureDollars` (legacy).
   final double? currentExposureDollars;
 
   const SharedSnapshotMeta({
@@ -94,7 +94,7 @@ class SharedSnapshotMeta {
     }
 
     final double? currentExposure =
-        _toDouble(json['currentExposureDollars']) ?? _toDouble(json['exposureDollars']);
+        _toDouble(json['exposureDollars']) ?? _toDouble(json['currentExposureDollars']);
 
     return SharedSnapshotMeta(
       accountLabel: json['accountLabel'] as String?,
