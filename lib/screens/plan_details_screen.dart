@@ -1,5 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:au_core/risk/risk_recommendation_provider_v1.dart';
+import 'package:au_core/risk/risk_recommendation_v1.dart';
+import 'package:au_core/risk_thresholds.dart';
+import 'package:au_core/trigger_engine/profiles.dart' as te;
 
 import '../services/shared_plan_loader.dart';
 import '../models/shared_planned_order.dart';
@@ -7,10 +11,7 @@ import '../models/shared_planned_order.dart';
 class PlanDetailsScreen extends StatelessWidget {
   final SharedPlanSummary plan;
 
-  const PlanDetailsScreen({
-    super.key,
-    required this.plan,
-  });
+  const PlanDetailsScreen({super.key, required this.plan});
 
   @override
   Widget build(BuildContext context) {
@@ -44,9 +45,7 @@ class PlanDetailsScreen extends StatelessWidget {
             title: const Text('Warnings'),
             content: SizedBox(
               width: double.maxFinite,
-              child: SingleChildScrollView(
-                child: SelectableText(text),
-              ),
+              child: SingleChildScrollView(child: SelectableText(text)),
             ),
             actions: [
               TextButton(
@@ -54,7 +53,9 @@ class PlanDetailsScreen extends StatelessWidget {
                   await Clipboard.setData(ClipboardData(text: text));
                   if (!dialogContext.mounted) return;
                   ScaffoldMessenger.of(dialogContext).showSnackBar(
-                    const SnackBar(content: Text('Warnings copied to clipboard.')),
+                    const SnackBar(
+                      content: Text('Warnings copied to clipboard.'),
+                    ),
                   );
                 },
                 child: const Text('Copy'),
@@ -68,7 +69,6 @@ class PlanDetailsScreen extends StatelessWidget {
         },
       );
     }
-
 
     final equity = plan.assumedEquityDollars;
     final exposure = plan.totalMaxExposure;
@@ -140,18 +140,13 @@ class PlanDetailsScreen extends StatelessWidget {
     }
 
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('Plan Details'),
-      ),
+      appBar: AppBar(title: const Text('Plan Details')),
       body: SingleChildScrollView(
         padding: const EdgeInsets.all(16),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            Text(
-              'Shared Plan Snapshot',
-              style: theme.textTheme.titleLarge,
-            ),
+            Text('Shared Plan Snapshot', style: theme.textTheme.titleLarge),
             const SizedBox(height: 12),
             Card(
               child: Padding(
@@ -160,10 +155,7 @@ class PlanDetailsScreen extends StatelessWidget {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     if (metaLine.isNotEmpty) ...[
-                      Text(
-                        metaLine,
-                        style: theme.textTheme.bodySmall,
-                      ),
+                      Text(metaLine, style: theme.textTheme.bodySmall),
                       const SizedBox(height: 8),
                     ],
                     Text(
@@ -195,43 +187,176 @@ class PlanDetailsScreen extends StatelessWidget {
                         style: theme.textTheme.bodyMedium,
                       ),
                     ],
-                    if (plan.inventoryWarnings.isNotEmpty || plan.locatorWarnings.isNotEmpty) ...[
+                    if (plan.inventoryWarnings.isNotEmpty ||
+                        plan.locatorWarnings.isNotEmpty) ...[
                       const SizedBox(height: 12),
-                      Text('Warnings (read-only):', style: theme.textTheme.titleSmall),
+                      Text(
+                        'Warnings (read-only):',
+                        style: theme.textTheme.titleSmall,
+                      ),
                       const SizedBox(height: 4),
                       if (plan.inventoryWarnings.isNotEmpty) ...[
-                        
-                    Row(
-                      children: [
-                        Expanded(
-                          child: Text(
-                            'Warnings',
-                            style: theme.textTheme.titleSmall,
-                          ),
+                        Row(
+                          children: [
+                            Expanded(
+                              child: Text(
+                                'Warnings',
+                                style: theme.textTheme.titleSmall,
+                              ),
+                            ),
+                            TextButton(
+                              onPressed: showWarningsDialog,
+                              child: const Text('View all'),
+                            ),
+                          ],
                         ),
-                        TextButton(
-                          onPressed: showWarningsDialog,
-                          child: const Text('View all'),
+                        Text(
+                          'Inventory warnings: ${plan.inventoryWarnings.length}',
+                          style: theme.textTheme.bodySmall,
                         ),
-                      ],
-                    ),
-                    Text('Inventory warnings: ${plan.inventoryWarnings.length}', style: theme.textTheme.bodySmall),
-                        ...plan.inventoryWarnings.take(3).map((w) => Text('• $w', style: theme.textTheme.bodySmall)),
+                        ...plan.inventoryWarnings
+                            .take(3)
+                            .map(
+                              (w) => Text(
+                                '• $w',
+                                style: theme.textTheme.bodySmall,
+                              ),
+                            ),
                         if (plan.inventoryWarnings.length > 3)
-                          Text('• (+${plan.inventoryWarnings.length - 3} more)', style: theme.textTheme.bodySmall),
+                          Text(
+                            '• (+${plan.inventoryWarnings.length - 3} more)',
+                            style: theme.textTheme.bodySmall,
+                          ),
                         const SizedBox(height: 6),
                       ],
                       if (plan.locatorWarnings.isNotEmpty) ...[
-                        Text('Selector warnings: ${plan.locatorWarnings.length}', style: theme.textTheme.bodySmall),
-                        ...plan.locatorWarnings.take(3).map((w) => Text('• $w', style: theme.textTheme.bodySmall)),
+                        Text(
+                          'Selector warnings: ${plan.locatorWarnings.length}',
+                          style: theme.textTheme.bodySmall,
+                        ),
+                        ...plan.locatorWarnings
+                            .take(3)
+                            .map(
+                              (w) => Text(
+                                '• $w',
+                                style: theme.textTheme.bodySmall,
+                              ),
+                            ),
                         if (plan.locatorWarnings.length > 3)
-                          Text('• (+${plan.locatorWarnings.length - 3} more)', style: theme.textTheme.bodySmall),
+                          Text(
+                            '• (+${plan.locatorWarnings.length - 3} more)',
+                            style: theme.textTheme.bodySmall,
+                          ),
                       ],
                     ],
                   ],
                 ),
               ),
             ),
+
+            // --- Risk Recommendation (V1) ---
+            // Read-only consumer: compute a governed recommendation from snapshotMeta + positions.
+            // This is informational only and does not override IQ/HQ guardrails.
+            if (plan.snapshotMetaRaw != null && plan.positions.isNotEmpty) ...[
+              const SizedBox(height: 16),
+              Text(
+                'Risk Recommendation (V1)',
+                style: theme.textTheme.titleMedium,
+              ),
+              const SizedBox(height: 8),
+              Builder(
+                builder: (context) {
+                  final Map<String, Object?> snapshotMeta =
+                      plan.snapshotMetaRaw ?? const <String, Object?>{};
+
+                  // Convert AU Insights SharedPosition -> au_core positionsV1 map shape.
+                  // Keys are producer-owned contract keys (symbol, netQuantity, lastPrice, avgEntryPrice, costBasisDollars).
+                  final List<Map<String, Object?>> positionsV1 = plan.positions
+                      .map(
+                        (p) => <String, Object?>{
+                          'symbol': p.symbol,
+                          'netQuantity': p.netQuantity,
+                          'lastPrice': p.lastPrice,
+                          'avgEntryPrice': p.avgEntryPrice,
+                          'costBasisDollars': p.costBasisDollars,
+                        },
+                      )
+                      .toList(growable: false);
+
+                  final provider =
+                      RiskRecommendationProviderV1.snapshotComposedFromSnapshotV1(
+                        snapshotMeta: snapshotMeta,
+                        positions: positionsV1,
+                        assumedEquityDollars: plan.assumedEquityDollars,
+                      );
+
+                  final RiskRecommendationV1 reco = provider
+                      .buildRiskRecommendationV1(
+                        thresholds: RiskThresholdsV1.defaults,
+                        emergencyMode: false,
+                        maxAllowed: null,
+                        nowUtc: DateTime.now().toUtc(),
+                      );
+
+                  String profileLabel(te.AUProfile p) {
+                    switch (p) {
+                      case te.AUProfile.conservative:
+                        return 'Conservative';
+                      case te.AUProfile.balanced:
+                        return 'Balanced';
+                      case te.AUProfile.cautiouslyAggressive:
+                        return 'Cautiously Aggressive';
+                      case te.AUProfile.aggressive:
+                        return 'Aggressive';
+                    }
+                  }
+
+                  final reasons = reco.reasons;
+
+                  return Card(
+                    child: Padding(
+                      padding: const EdgeInsets.all(16),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            'Recommended: ${profileLabel(reco.recommended)}',
+                            style: theme.textTheme.titleSmall,
+                          ),
+                          const SizedBox(height: 8),
+                          Text(
+                            'Threshold policy: RiskThresholdsV1.defaults (governed)',
+                            style: theme.textTheme.bodySmall,
+                          ),
+                          const SizedBox(height: 8),
+                          if (reasons.isNotEmpty) ...[
+                            Text('Reasons:', style: theme.textTheme.bodyMedium),
+                            const SizedBox(height: 4),
+                            ...reasons.map(
+                              (r) => Text(
+                                '• $r',
+                                style: theme.textTheme.bodySmall,
+                              ),
+                            ),
+                          ] else ...[
+                            Text(
+                              'Reasons unavailable.',
+                              style: theme.textTheme.bodySmall,
+                            ),
+                          ],
+                          const SizedBox(height: 10),
+                          Text(
+                            'Read-only signal. IQ/HQ guardrails still govern execution.',
+                            style: theme.textTheme.bodySmall,
+                          ),
+                        ],
+                      ),
+                    ),
+                  );
+                },
+              ),
+            ],
+
             const SizedBox(height: 16),
             Text(
               'Exposure & Tilt Overview',
@@ -252,7 +377,7 @@ class PlanDetailsScreen extends StatelessWidget {
                     Text(
                       equity != null && equity > 0 && netPctOfEquity != null
                           ? 'Net tilt: \$${netDollars.toStringAsFixed(0)} '
-                            '(${netPctOfEquity.toStringAsFixed(1)}% of equity)'
+                                '(${netPctOfEquity.toStringAsFixed(1)}% of equity)'
                           : 'Net tilt: \$${netDollars.toStringAsFixed(0)}',
                       style: theme.textTheme.bodyMedium,
                     ),
@@ -264,10 +389,7 @@ class PlanDetailsScreen extends StatelessWidget {
                       ),
                     ],
                     const SizedBox(height: 8),
-                    Text(
-                      coachLine,
-                      style: theme.textTheme.bodySmall,
-                    ),
+                    Text(coachLine, style: theme.textTheme.bodySmall),
                     const SizedBox(height: 4),
                     Text(
                       'AU Insights never places trades or changes your orders; it only summarizes risk and exposure from your current shared plan.',
@@ -281,10 +403,7 @@ class PlanDetailsScreen extends StatelessWidget {
               ),
             ),
             const SizedBox(height: 16),
-            Text(
-              'Risk Summary',
-              style: theme.textTheme.titleMedium,
-            ),
+            Text('Risk Summary', style: theme.textTheme.titleMedium),
             const SizedBox(height: 8),
             if (risk == null)
               Text(
@@ -344,10 +463,7 @@ class PlanDetailsScreen extends StatelessWidget {
                 ),
               ),
             const SizedBox(height: 16),
-            Text(
-              'Block Summary',
-              style: theme.textTheme.titleMedium,
-            ),
+            Text('Block Summary', style: theme.textTheme.titleMedium),
             const SizedBox(height: 8),
             if (blocks.isEmpty)
               Text(
@@ -391,10 +507,7 @@ class PlanDetailsScreen extends StatelessWidget {
                 ),
               ),
             const SizedBox(height: 16),
-            Text(
-              'Symbol Summary',
-              style: theme.textTheme.titleMedium,
-            ),
+            Text('Symbol Summary', style: theme.textTheme.titleMedium),
             const SizedBox(height: 8),
             if (symbolAgg.isEmpty)
               Text(
@@ -435,16 +548,10 @@ class PlanDetailsScreen extends StatelessWidget {
                 ),
               ),
             const SizedBox(height: 16),
-            Text(
-              'Orders',
-              style: theme.textTheme.titleMedium,
-            ),
+            Text('Orders', style: theme.textTheme.titleMedium),
             const SizedBox(height: 8),
             if (orders.isEmpty)
-              Text(
-                'No orders in this plan.',
-                style: theme.textTheme.bodyMedium,
-              )
+              Text('No orders in this plan.', style: theme.textTheme.bodyMedium)
             else
               ListView.builder(
                 shrinkWrap: true,
@@ -454,8 +561,9 @@ class PlanDetailsScreen extends StatelessWidget {
                   final o = orders[index];
                   final side = o.side.toString().split('.').last.toUpperCase();
                   final price = o.targetPrice ?? o.stopLossPrice;
-                  final priceStr =
-                      price != null ? '\$${price.toStringAsFixed(2)}' : 'n/a';
+                  final priceStr = price != null
+                      ? '\$${price.toStringAsFixed(2)}'
+                      : 'n/a';
 
                   String subtitle =
                       '${o.maxDollarExposure.toStringAsFixed(0)} @ $priceStr';
@@ -487,7 +595,8 @@ class PlanDetailsScreen extends StatelessWidget {
   }
 
   List<_SymbolAggregate> _buildSymbolAggregates(
-      List<SharedPlannedOrder> orders) {
+    List<SharedPlannedOrder> orders,
+  ) {
     final Map<String, _SymbolAggregate> map = {};
     for (final o in orders) {
       final key = o.symbol;
