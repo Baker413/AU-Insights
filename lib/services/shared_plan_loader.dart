@@ -94,7 +94,8 @@ class SharedSnapshotMeta {
     }
 
     final double? currentExposure =
-        _toDouble(json['exposureDollars']) ?? _toDouble(json['currentExposureDollars']);
+        _toDouble(json['exposureDollars']) ??
+        _toDouble(json['currentExposureDollars']);
 
     return SharedSnapshotMeta(
       accountLabel: json['accountLabel'] as String?,
@@ -210,6 +211,12 @@ class SharedPlanSummary {
   final SharedRiskSnapshot? riskSummary;
   final List<SharedBlock> blocks;
   final SharedSnapshotMeta? snapshotMeta;
+
+  /// Raw snapshotMeta map (read-only), preserved for diagnostics and provider wiring.
+  ///
+  /// - Null when unavailable (e.g., Shared Plan v3 envelope path).
+  /// - Present for legacy JSON parse when snapshotMeta exists as a map.
+  final Map<String, Object?>? snapshotMetaRaw;
   final List<SharedPosition> positions;
   final List<String>? allowedSymbols;
 
@@ -235,6 +242,7 @@ class SharedPlanSummary {
     this.riskSummary,
     this.blocks = const [],
     this.snapshotMeta,
+    this.snapshotMetaRaw,
     this.positions = const [],
     this.allowedSymbols,
     this.inventoryWarnings = const [],
@@ -249,7 +257,7 @@ class SharedPlanLoader {
       if (basePath == null || basePath.isEmpty) {
         debugPrint('SharedPlanLoader: no AppGroup path available.');
         return const SharedPlanSummary(exists: false, orderCount: 0);
-}
+      }
       // Prefer active-account pointer -> per-account plan file (INV-144 parity).
       // Selection is governed by au_core SharedPlanLocatorV1 over a normalized StorageInventoryV1.
       final dir = Directory(basePath);
@@ -274,7 +282,9 @@ class SharedPlanLoader {
                 ),
               );
             } catch (e) {
-              debugPrint('SharedPlanLoader: skipping inventory entry due to error: $e');
+              debugPrint(
+                'SharedPlanLoader: skipping inventory entry due to error: $e',
+              );
             }
           }
         }
@@ -322,7 +332,9 @@ class SharedPlanLoader {
 
       final selectedPath = sel.selected?.path;
       if (selectedPath == null || selectedPath.trim().isEmpty) {
-        debugPrint('SharedPlanLoader: no shared plan file selected (reason=${sel.reason}).');
+        debugPrint(
+          'SharedPlanLoader: no shared plan file selected (reason=${sel.reason}).',
+        );
         return SharedPlanSummary(
           exists: false,
           orderCount: 0,
@@ -363,14 +375,18 @@ class SharedPlanLoader {
             try {
               blocks.add(SharedBlock.fromJson(b));
             } catch (e, st) {
-              debugPrint('SharedPlanLoader: skipping bad block entry (contract): $e\n$st');
+              debugPrint(
+                'SharedPlanLoader: skipping bad block entry (contract): $e\n$st',
+              );
             }
           }
         }
 
         // Producer-owned governance: allowed symbol universe (optional).
         // Null/empty means "not enforced".
-        final List<String>? allowedSymbolsOrNull = _normalizeAllowedSymbols(env.allowedSymbols);
+        final List<String>? allowedSymbolsOrNull = _normalizeAllowedSymbols(
+          env.allowedSymbols,
+        );
 
         // --- AU Audit (read-only consumer) ---
         // Run the au_core Audit Wall on the *plan we are about to display*.
@@ -408,7 +424,9 @@ class SharedPlanLoader {
           debugPrint(report.summaryLine());
           for (final r in report.results) {
             if (r.status.label == 'FAIL' || r.status.label == 'WARN') {
-              debugPrint('[${r.id}] ${r.status.label}: ${r.title} — ${r.message}');
+              debugPrint(
+                '[${r.id}] ${r.status.label}: ${r.title} — ${r.message}',
+              );
             }
           }
           debugPrint('=== END AU INSIGHTS AUDIT REPORT ===');
@@ -422,20 +440,26 @@ class SharedPlanLoader {
           symbolCount: orders.map((o) => o.symbol).toSet().length,
           buyCount: orders.where((o) => o.side == SharedOrderSide.buy).length,
           sellCount: orders.where((o) => o.side == SharedOrderSide.sell).length,
-          totalMaxExposure: orders.fold(0.0, (sum, o) => sum + o.maxDollarExposure),
+          totalMaxExposure: orders.fold(
+            0.0,
+            (sum, o) => sum + o.maxDollarExposure,
+          ),
           riskModeLabel: env.riskModeLabel,
           assumedEquityDollars: env.assumedEquityDollars,
           version: env.version,
-          timestamp: (env.timestamp != null) ? DateTime.tryParse(env.timestamp!) : null,
+          timestamp: (env.timestamp != null)
+              ? DateTime.tryParse(env.timestamp!)
+              : null,
           orders: orders,
           riskSummary: null,
           blocks: blocks,
           allowedSymbols: allowedSymbolsOrNull,
           snapshotMeta: null,
+          snapshotMetaRaw: null,
           positions: const [],
           inventoryWarnings: invWarnings,
           locatorWarnings: locWarnings,
-      );
+        );
       }
 
       final decoded = json.decode(text);
@@ -456,6 +480,7 @@ class SharedPlanLoader {
       String? riskModeLabel;
       double? assumedEquityDollars;
       SharedSnapshotMeta? snapshotMeta;
+      Map<String, Object?>? snapshotMetaRaw;
       List<SharedPosition> positions = <SharedPosition>[];
 
       void addOrdersFromList(List list) {
@@ -540,6 +565,7 @@ class SharedPlanLoader {
 
         final snapshotJson = map['snapshotMeta'];
         if (snapshotJson is Map) {
+          snapshotMetaRaw = Map<String, Object?>.from(snapshotJson);
           try {
             snapshotMeta = SharedSnapshotMeta.fromJson(
               Map<String, dynamic>.from(snapshotJson),
@@ -602,11 +628,12 @@ class SharedPlanLoader {
           riskSummary: riskSummary,
           blocks: blocks,
           snapshotMeta: snapshotMeta,
+          snapshotMetaRaw: snapshotMetaRaw,
           allowedSymbols: allowedSymbols,
           positions: positions,
           inventoryWarnings: invWarnings,
           locatorWarnings: locWarnings,
-      );
+        );
       }
 
       final symbols = <String>{};
@@ -640,12 +667,12 @@ class SharedPlanLoader {
         blocks: blocks,
         snapshotMeta: snapshotMeta,
         positions: positions,
-          inventoryWarnings: invWarnings,
-          locatorWarnings: locWarnings,
+        inventoryWarnings: invWarnings,
+        locatorWarnings: locWarnings,
       );
     } catch (e, st) {
       debugPrint('SharedPlanLoader: error reading shared plan: $e\n$st');
       return const SharedPlanSummary(exists: false, orderCount: 0);
-}
+    }
   }
 }
