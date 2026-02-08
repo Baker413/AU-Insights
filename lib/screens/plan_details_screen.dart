@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:au_core/au_core.dart';
-import 'package:au_core/risk/risk_recommendation_provider_v1.dart';
 import 'package:au_core/trigger_engine/profiles.dart' as te;
 
 import '../services/shared_plan_loader.dart';
