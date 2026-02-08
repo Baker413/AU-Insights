@@ -485,7 +485,7 @@ final reasons = reco.reasons;
                       if (risk.drawdownPercent != null) ...[
                         const SizedBox(height: 4),
                         Text(
-                          'Drawdown: ${risk.drawdownPercent!.toStringAsFixed(1)}%',
+                          'Drawdown: ${risk.drawdownPercent!.toStringAsFixed(1)}%  (Units: %)',
                           style: theme.textTheme.bodyMedium,
                         ),
                       ],
