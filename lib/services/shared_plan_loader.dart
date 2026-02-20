@@ -172,16 +172,28 @@ class SharedBlock {
   });
 
   factory SharedBlock.fromJson(Map<String, dynamic> json) {
+    // Contract-first keys (au_core SharedPlanV3 blocksV1 lifecycle law v2):
+    //   id, symbol, side, createdAt, status, nextAction
+    //
+    // Legacy synonyms (accepted for back-compat / drift tolerance):
+    //   blockId -> id
+    //   direction -> side
+    //
+    // AU Insights keeps UI-friendly fields (blockId/direction/status uppercased),
+    // but parsing MUST accept canonical contract keys.
     final plannedOrders = json['plannedOrders'];
     int count = 0;
     if (plannedOrders is List) {
       count = plannedOrders.length;
     }
 
+    final Object? idRaw = json['id'] ?? json['blockId'];
+    final Object? sideRaw = json['side'] ?? json['direction'];
+
     return SharedBlock(
-      blockId: _toString(json['blockId']),
+      blockId: _toString(idRaw),
       symbol: _toString(json['symbol']).toUpperCase(),
-      direction: _toString(json['direction']).toUpperCase(),
+      direction: _toString(sideRaw).toUpperCase(),
       status: _toString(json['status']).toUpperCase(),
       createdAt: json['createdAt'] is String
           ? DateTime.tryParse(json['createdAt'] as String)
@@ -201,6 +213,7 @@ class SharedBlock {
       regimeTag: json['regimeTag'] as String?,
       plannedOrderCount: count,
     );
+
   }
 }
 
