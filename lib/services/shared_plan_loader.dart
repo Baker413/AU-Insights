@@ -228,6 +228,13 @@ class SharedPlanSummary {
   final double? assumedEquityDollars;
   final int? version;
   final DateTime? timestamp;
+  // Plan identity metadata (optional). Present only when the v3 envelope provides it.
+  final String? planId;
+  final int? identityVersion;
+  // Selector diagnostics (optional): why this plan was selected + which path was chosen.
+  // Stored as strings to avoid coupling AU Insights UI to au_core enum types.
+  final String? selectionReason;
+  final String? selectedPlanPath;
   final List<SharedPlannedOrder> orders;
   final SharedRiskSnapshot? riskSummary;
   final List<SharedBlock> blocks;
@@ -259,6 +266,10 @@ class SharedPlanSummary {
     this.assumedEquityDollars,
     this.version,
     this.timestamp,
+    this.planId,
+    this.identityVersion,
+    this.selectionReason,
+    this.selectedPlanPath,
     this.orders = const [],
     this.riskSummary,
     this.blocks = const [],
@@ -696,6 +707,10 @@ class SharedPlanLoader {
           assumedEquityDollars: assumedEquityDollars,
           version: version,
           timestamp: timestamp,
+          planId: env?.planId,
+          identityVersion: (env?.planId == null) ? null : env?.identityVersion,
+          selectionReason: sel.reason.toString(),
+          selectedPlanPath: selectedPath,
           orders: const [],
           riskSummary: riskSummary,
           blocks: blocks,
@@ -726,6 +741,8 @@ class SharedPlanLoader {
       return SharedPlanSummary(
         exists: true,
         orderCount: orders.length,
+        selectionReason: sel.reason.toString(),
+        selectedPlanPath: selectedPath,
         symbolCount: symbols.length,
         buyCount: buyCount,
         sellCount: sellCount,
