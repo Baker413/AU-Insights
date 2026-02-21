@@ -709,7 +709,7 @@ class SharedPlanLoader {
           timestamp: timestamp,
           planId: env?.planId,
           identityVersion: (env?.planId == null) ? null : env?.identityVersion,
-          selectionReason: sel.reason.toString(),
+          selectionReason: sel.reason.name,
           selectedPlanPath: selectedPath,
           orders: const [],
           riskSummary: riskSummary,
@@ -741,7 +741,7 @@ class SharedPlanLoader {
       return SharedPlanSummary(
         exists: true,
         orderCount: orders.length,
-        selectionReason: sel.reason.toString(),
+        selectionReason: sel.reason.name,
         selectedPlanPath: selectedPath,
         symbolCount: symbols.length,
         buyCount: buyCount,

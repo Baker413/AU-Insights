@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../services/shared_execution_loader.dart';
 import '../services/shared_plan_loader.dart';
+import '../widgets/plan_selection_banner.dart';
 
 class BlocksScreen extends StatefulWidget {
   final SharedPlanSummary plan;
@@ -65,6 +66,10 @@ class _BlocksScreenState extends State<BlocksScreen> {
       ),
       body: Column(
         children: [
+          PlanSelectionBanner(
+            selectionReason: widget.plan.selectionReason,
+            selectedPlanPath: widget.plan.selectedPlanPath,
+          ),
           _buildLiveBlocksCard(theme),
           if (allBlocks.isEmpty)
             Expanded(

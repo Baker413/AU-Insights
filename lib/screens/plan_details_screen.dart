@@ -5,6 +5,7 @@ import 'package:au_core/trigger_engine/profiles.dart' as te;
 
 import '../services/shared_plan_loader.dart';
 import '../models/shared_planned_order.dart';
+import '../widgets/plan_selection_banner.dart';
 
 class PlanDetailsScreen extends StatelessWidget {
   final SharedPlanSummary plan;
@@ -173,6 +174,10 @@ class PlanDetailsScreen extends StatelessWidget {
           children: [
             Text('Shared Plan Snapshot', style: theme.textTheme.titleLarge),
             const SizedBox(height: 12),
+            PlanSelectionBanner(
+              selectionReason: plan.selectionReason,
+              selectedPlanPath: plan.selectedPlanPath,
+            ),
             Card(
               child: Padding(
                 padding: const EdgeInsets.all(16),
