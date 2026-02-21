@@ -18,15 +18,51 @@ class PlanSelectionBanner extends StatelessWidget {
     return v.split(Platform.pathSeparator).last;
   }
 
+  void _showHelp(BuildContext context) {
+    showDialog<void>(
+      context: context,
+      builder: (dialogContext) {
+        return AlertDialog(
+          title: const Text('Plan selection'),
+          content: const SingleChildScrollView(
+            child: Text(
+              'AU Insights shows how the shared plan file was selected.\n\n'
+              'ACTIVE PLAN\n'
+              '• Selected by active-account pointer (the intended, stable selection).\n\n'
+              'DRAFT / ALT PLAN\n'
+              '• Selected by newest per-account scan when no active pointer exists.\n\n'
+              'DRAFT / ALT (LEGACY)\n'
+              '• Selected by legacy fallback logic for older artifacts.\n\n'
+              'NO PLAN\n'
+              '• The locator did not select any shared plan file.\n\n'
+              'UNKNOWN\n'
+              '• The token is not recognized by this UI (may indicate version drift).',
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(dialogContext).pop(),
+              child: const Text('Close'),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final cs = theme.colorScheme;
 
     final reason = (selectionReason ?? '').trim();
     final fileName = _baseName(selectedPlanPath);
 
     String title;
     String subtitle;
+    IconData icon;
+    Color bg;
+    Color fg;
 
     // Contract truth (au_core SharedPlanLocatorV1):
     // - activeAccountPointer = ACTIVE
@@ -35,18 +71,33 @@ class PlanSelectionBanner extends StatelessWidget {
     if (reason == 'activeAccountPointer') {
       title = 'ACTIVE PLAN';
       subtitle = 'Selected by active-account pointer.';
+      icon = Icons.verified_rounded;
+      bg = cs.primaryContainer;
+      fg = cs.onPrimaryContainer;
     } else if (reason == 'newestPerAccountScan') {
       title = 'DRAFT / ALT PLAN';
       subtitle = 'Selected by newest per-account scan (no active pointer).';
+      icon = Icons.history_rounded;
+      bg = cs.tertiaryContainer;
+      fg = cs.onTertiaryContainer;
     } else if (reason == 'legacyFallback') {
       title = 'DRAFT / ALT PLAN (LEGACY)';
       subtitle = 'Selected by legacy fallback.';
+      icon = Icons.inventory_2_rounded;
+      bg = cs.tertiaryContainer;
+      fg = cs.onTertiaryContainer;
     } else if (reason == 'none' || reason.isEmpty) {
       title = 'NO PLAN SELECTED';
       subtitle = 'No shared plan file was selected by the locator.';
+      icon = Icons.remove_circle_outline_rounded;
+      bg = cs.surfaceContainerHighest;
+      fg = cs.onSurface;
     } else {
       title = 'PLAN SELECTION (UNKNOWN)';
       subtitle = 'Selection reason token is not recognized by this UI.';
+      icon = Icons.help_outline_rounded;
+      bg = cs.errorContainer;
+      fg = cs.onErrorContainer;
     }
 
     final metaBits = <String>[];
@@ -62,8 +113,36 @@ class PlanSelectionBanner extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text(title, style: theme.textTheme.titleSmall),
-            const SizedBox(height: 4),
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.center,
+              children: [
+                Container(
+                  decoration: BoxDecoration(
+                    color: bg,
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(icon, size: 16, color: fg),
+                      const SizedBox(width: 6),
+                      Text(
+                        title,
+                        style: theme.textTheme.titleSmall?.copyWith(color: fg),
+                      ),
+                    ],
+                  ),
+                ),
+                const Spacer(),
+                IconButton(
+                  tooltip: 'What is this?',
+                  onPressed: () => _showHelp(context),
+                  icon: const Icon(Icons.info_outline_rounded),
+                ),
+              ],
+            ),
+            const SizedBox(height: 6),
             Text(subtitle, style: theme.textTheme.bodySmall),
             if (metaLine.isNotEmpty) ...[
               const SizedBox(height: 8),
