@@ -148,6 +148,7 @@ class SharedBlock {
   final DateTime? createdAt;
   final DateTime? lastUpdatedAt;
   final String? note;
+  final String? origin;
   final int? lifecycleVersion;
   final double? maxBlockDollars;
   final double? initialRiskDollars;
@@ -163,6 +164,7 @@ class SharedBlock {
     this.createdAt,
     this.lastUpdatedAt,
     this.note,
+    this.origin,
     this.lifecycleVersion,
     this.maxBlockDollars,
     this.initialRiskDollars,
@@ -170,6 +172,13 @@ class SharedBlock {
     this.regimeTag,
     this.plannedOrderCount = 0,
   });
+
+  bool get isLegacy {
+    final o = (origin ?? '').trim().toLowerCase();
+    if (o == 'legacy') return true;
+    final n = (note ?? '').toLowerCase();
+    return n.contains('legacy');
+  }
 
   factory SharedBlock.fromJson(Map<String, dynamic> json) {
     // Contract-first keys (au_core SharedPlanV3 blocksV1 lifecycle law v2):
@@ -202,6 +211,18 @@ class SharedBlock {
           ? DateTime.tryParse(json['lastUpdatedAt'] as String)
           : null,
       note: json['note'] as String?,
+      origin: (() {
+        final v = json['origin'];
+        if (v is! String) return null;
+        final t = v.trim();
+        if (t.isEmpty) return null;
+        final l = t.toLowerCase();
+        // Consumer parsing stays canonical/allowlisted.
+        if (l != t) throw FormatException('SharedBlock.origin must be lowercase canonical (got "$t")');
+        const allowed = <String>{'legacy', 'au'};
+        if (!allowed.contains(l)) throw FormatException('SharedBlock.origin not allowlisted (got "$t")');
+        return l;
+      })(),
       lifecycleVersion: json['lifecycleVersion'] is int
           ? json['lifecycleVersion'] as int
           : (json['lifecycleVersion'] is num
@@ -410,6 +431,8 @@ class SharedPlanLoader {
               debugPrint(
                 'SharedPlanLoader: skipping bad block entry (contract): $e\n$st',
               );
+              // Make this visible to the operator (non-fatal consumer warning).
+              invWarnings.add('WARN: bad blocksV1 entry skipped: $e');
             }
           }
         }
