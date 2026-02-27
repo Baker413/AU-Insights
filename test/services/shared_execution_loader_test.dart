@@ -51,6 +51,7 @@ void main() {
         activeAccountId: 'acct1',
         planId: 'planA',
         plannedSymbolSides: <String>{'SPY|BUY'},
+        legacySymbolSides: <String>{'QQQ|SELL'},
       );
 
       expect(rows.length, 2);
@@ -63,6 +64,7 @@ void main() {
       expect(spy.matchesPlanId, isTrue);
       expect(spy.matchesActiveAccount, isTrue);
       expect(spy.lastConfirmedAtUtc, '2026-02-20T02:00:00Z');
+      expect(spy.isLegacyOrigin, isFalse);
 
       final qqq = rows.firstWhere((r) => r.symbol == 'QQQ');
       expect(qqq.side, 'SELL');
@@ -72,6 +74,7 @@ void main() {
       expect(qqq.matchesPlanId, isFalse); // planB != planA
       expect(qqq.matchesActiveAccount, isTrue);
       expect(qqq.lastConfirmedAtUtc, '2026-02-20T00:30:00Z');
+      expect(qqq.isLegacyOrigin, isTrue);
     });
 
     test('stable sort: planned blocks first, then symbol, then side', () {
@@ -116,6 +119,7 @@ void main() {
         activeAccountId: 'a',
         planId: 'p',
         plannedSymbolSides: <String>{'ZZZ|BUY'},
+        legacySymbolSides: const <String>{},
       );
 
       // Planned (ZZZ|BUY) first.

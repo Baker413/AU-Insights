@@ -16,6 +16,12 @@ class LiveBlockRow {
   final bool matchesActiveAccount;
   final bool matchesPlannedBlock;
 
+  /// True if this (symbol|side) is known to be a legacy-origin governed block.
+  ///
+  /// AU Insights uses this only for clear UI labeling (e.g., a "LEGACY" pill),
+  /// not for gating or behavior changes.
+  final bool isLegacyOrigin;
+
   const LiveBlockRow({
     required this.symbol,
     required this.side,
@@ -25,6 +31,7 @@ class LiveBlockRow {
     required this.matchesPlanId,
     required this.matchesActiveAccount,
     required this.matchesPlannedBlock,
+    required this.isLegacyOrigin,
   });
 }
 
@@ -171,18 +178,21 @@ class SharedExecutionLoader {
     required String? activeAccountId,
     required String? planId,
     required Set<String> plannedSymbolSides, // e.g. {"SPY|BUY"}
+    required Set<String> legacySymbolSides, // e.g. {"SPY|BUY"} where origin=legacy
   }) {
     return _buildRows(
       entries: entries,
       activeAccountId: activeAccountId,
       planId: planId,
       plannedSymbolSides: plannedSymbolSides.toList(growable: false),
+      legacySymbolSides: legacySymbolSides.toList(growable: false),
     );
   }
 
   Future<SharedExecutionLoaderResult> loadForPlan({
     required String? planId,
     required List<String> plannedSymbolSides, // e.g. ["SPY|BUY"]
+        List<String> legacySymbolSides = const <String>[], // e.g. ["SPY|BUY"] where origin=legacy
   }) async {
     try {
       final basePath = await _getBasePath();
@@ -212,6 +222,7 @@ class SharedExecutionLoader {
         activeAccountId: activeAccountId,
         planId: planId,
         plannedSymbolSides: plannedSymbolSides,
+        legacySymbolSides: legacySymbolSides,
       );
 
       return SharedExecutionLoaderResult(
@@ -236,10 +247,16 @@ class SharedExecutionLoader {
     required String? activeAccountId,
     required String? planId,
     required List<String> plannedSymbolSides,
+    required List<String> legacySymbolSides,
   }) {
     final aid = (activeAccountId ?? '').trim();
     final pid = (planId ?? '').trim();
     final planned = plannedSymbolSides
+        .map((e) => e.trim().toUpperCase())
+        .where((e) => e.isNotEmpty)
+        .toSet();
+
+    final legacy = legacySymbolSides
         .map((e) => e.trim().toUpperCase())
         .where((e) => e.isNotEmpty)
         .toSet();
@@ -297,6 +314,7 @@ class SharedExecutionLoader {
           matchesPlanId: pid.isEmpty ? true : planMatch,
           matchesActiveAccount: aid.isEmpty ? true : accountMatch,
           matchesPlannedBlock: planned.contains(k),
+          isLegacyOrigin: legacy.contains(k),
         ),
       );
     }

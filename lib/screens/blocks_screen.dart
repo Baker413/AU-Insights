@@ -25,6 +25,10 @@ class _BlocksScreenState extends State<BlocksScreen> {
 
   void _refreshLiveBlocksFuture() {
     final planned = <String>[];
+    final legacy = widget.plan.blocks
+        .where((b) => b.isLegacy)
+        .map((b) => '${b.symbol}|${b.direction}'.toUpperCase())
+        .toList(growable: false);
     for (final b in widget.plan.blocks) {
       final sym = b.symbol.trim().toUpperCase();
       final side = b.direction.trim().toUpperCase();
@@ -35,6 +39,7 @@ class _BlocksScreenState extends State<BlocksScreen> {
     _liveExecFuture = _execLoader.loadForPlan(
       planId: widget.plan.planId,
       plannedSymbolSides: planned,
+      legacySymbolSides: legacy,
     );
   }
 
@@ -244,6 +249,24 @@ class _BlocksScreenState extends State<BlocksScreen> {
                               ),
                             ),
                             const SizedBox(width: 8),
+                            if (r.isLegacyOrigin)
+                              Container(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 8,
+                                  vertical: 2,
+                                ),
+                                decoration: BoxDecoration(
+                                  borderRadius: BorderRadius.circular(999),
+                                  border: Border.all(
+                                    color: theme.dividerColor,
+                                  ),
+                                ),
+                                child: Text(
+                                  'LEGACY',
+                                  style: theme.textTheme.labelSmall,
+                                ),
+                              ),
+                            if (r.isLegacyOrigin) const SizedBox(width: 8),
                             Text(
                               '${r.uniqueOrderCount} orders',
                               style: theme.textTheme.bodySmall,
