@@ -350,6 +350,63 @@ class _InsightsHomeScreenState extends State<InsightsHomeScreen> {
 
 
 
+  double? _toFiniteDoubleOrNull(Object? v) {
+    if (v == null) return null;
+    if (v is num) {
+      final d = v.toDouble();
+      return d.isFinite ? d : null;
+    }
+    if (v is String) {
+      final d = double.tryParse(v);
+      return (d != null && d.isFinite) ? d : null;
+    }
+    return null;
+  }
+
+  double? _drawdownPercentFromSnapshotMetaRaw(Map<String, Object?>? raw) {
+    if (raw == null || raw.isEmpty) return null;
+
+    double? fraction = _toFiniteDoubleOrNull(raw['drawdownPct']);
+
+    if (fraction == null) {
+      final nested = raw['drawdownTruthV1'];
+      if (nested is Map) {
+        fraction = _toFiniteDoubleOrNull(nested['drawdownPct']);
+      }
+    }
+
+    if (fraction == null || fraction < 0.0 || fraction > 0.95) return null;
+    return fraction * 100.0;
+  }
+
+  double _bestEffortCurrentInvestedDollars(SharedPlanSummary p) {
+    final fromSnapshot = p.snapshotMeta?.currentExposureDollars;
+    if (fromSnapshot != null && fromSnapshot.isFinite && fromSnapshot >= 0.0) {
+      return fromSnapshot;
+    }
+
+    final fromLegacy = p.riskSummary?.currentInvestedDollars;
+    if (fromLegacy != null && fromLegacy.isFinite && fromLegacy >= 0.0) {
+      return fromLegacy;
+    }
+
+    return 0.0;
+  }
+
+  double? _bestEffortEquityBasis(SharedPlanSummary p) {
+    final equity = p.assumedEquityDollars;
+    if (equity != null && equity.isFinite && equity > 0.0) return equity;
+
+    final legacyMaxInvest = p.riskSummary?.maxInvestDollars;
+    if (legacyMaxInvest != null &&
+        legacyMaxInvest.isFinite &&
+        legacyMaxInvest > 0.0) {
+      return legacyMaxInvest;
+    }
+
+    return null;
+  }
+
   Widget _buildRiskCard(BuildContext context, SharedPlanSummary? plan) {
     final theme = Theme.of(context);
 
@@ -366,11 +423,11 @@ class _InsightsHomeScreenState extends State<InsightsHomeScreen> {
     final double? equity = p.assumedEquityDollars;
     final double? maxInvest = risk?.maxInvestDollars;
 
-    final double invested = risk?.currentInvestedDollars ?? 0.0;
+    final double invested = _bestEffortCurrentInvestedDollars(p);
     final double hedge = risk?.currentHedgeDollars ?? 0.0;
     final double net = invested - hedge;
 
-    double? equityForPct = equity ?? maxInvest;
+    double? equityForPct = _bestEffortEquityBasis(p);
     if (equityForPct != null && equityForPct <= 0) {
       equityForPct = null;
     }
@@ -407,7 +464,9 @@ class _InsightsHomeScreenState extends State<InsightsHomeScreen> {
     }
 
     String drawdownLine = 'Drawdown vs peak: n/a';
-    final double? dd = risk?.drawdownPercent;
+    final double? dd =
+        _drawdownPercentFromSnapshotMetaRaw(p.snapshotMetaRaw) ??
+        risk?.drawdownPercent;
     if (dd != null) {
       drawdownLine = 'Drawdown vs peak: ${dd.toStringAsFixed(1)}%';
     }
@@ -432,7 +491,7 @@ class _InsightsHomeScreenState extends State<InsightsHomeScreen> {
     String postureLine;
     if (equityForPct == null || netPct == null) {
       postureLine =
-          'Risk posture: cannot compute net % of equity yet (missing equity or max-exposure hint).';
+          'Risk posture: cannot compute net % of equity yet (missing equity basis).';
     } else if (netPct > 25.0) {
       postureLine =
           'Risk posture: meaningfully long – net exposure is above about 25% of equity. '
